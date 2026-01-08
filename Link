@@ -1,0 +1,6 @@
+git clone https://github.com/tomaspinho/rtl8821ce.git
+cd rtl8821ce
+sudo ./dkms-install.sh
+
+
+sudo apt install build-essential dkms git
