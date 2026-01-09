@@ -4,3 +4,4 @@ sudo ./dkms-install.sh
 
 
 sudo apt install build-essential dkms git
+http://192.0.0.4:8080
