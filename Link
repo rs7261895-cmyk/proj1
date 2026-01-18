@@ -8,3 +8,104 @@ http://192.0.0.4:8080
 
 
 sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y && sudo apt autoclean && sudo journalctl --vacuum-time=3d
+
+import logging
+from collections import Counter
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
+
+# ========= CONFIG =========
+TOKEN = "PASTE_NEW_TOKEN_HERE"
+BASE_URL = "https://gotopage.xyz/?ref=6"
+ADMIN_ID = 123456789  # your Telegram user ID
+
+# ========= LOGGING =========
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
+
+# ========= ANALYTICS =========
+search_counter = Counter()
+
+# ========= HELPERS =========
+def build_quality_buttons(movie: str):
+    movie_q = movie.replace(" ", "+")
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📱 480p", url=f"{BASE_URL}&movie={movie_q}&q=480")],
+        [InlineKeyboardButton("💻 720p", url=f"{BASE_URL}&movie={movie_q}&q=720")],
+        [InlineKeyboardButton("🎬 1080p", url=f"{BASE_URL}&movie={movie_q}&q=1080")],
+    ])
+
+# ========= HANDLERS =========
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 *Welcome*\n\n"
+        "Send the *full movie name*.\n"
+        "You will get one-click quality links.\n\n"
+        "Example:\n"
+        "`kgf 2`\n`pushpa 2`\n`avatar`",
+        parse_mode="Markdown",
+    )
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    if not search_counter:
+        await update.message.reply_text("📊 No data yet.")
+        return
+
+    text = "📊 *Top Searches*\n\n"
+    for movie, count in search_counter.most_common(10):
+        text += f"• {movie} → {count}\n"
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        text = (update.message.text or "").strip().lower()
+
+        if len(text) < 2:
+            await update.message.reply_text(
+                "❌ Please send a valid movie name."
+            )
+            return
+
+        # analytics
+        search_counter[text] += 1
+        logger.info("Search: %s", text)
+
+        # direct quality buttons
+        await update.message.reply_text(
+            f"🎬 *{text.title()}*\nSelect quality:",
+            reply_markup=build_quality_buttons(text),
+            parse_mode="Markdown",
+        )
+
+    except Exception:
+        logger.exception("Error")
+        await update.message.reply_text(
+            "⚠️ Something went wrong. Try again."
+        )
+
+# ========= APP =========
+app = ApplicationBuilder().token(TOKEN).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("stats", stats))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, movie_handler))
+
+print("Bot is running...")
+app.run_polling()
